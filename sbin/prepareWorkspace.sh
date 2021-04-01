@@ -171,6 +171,7 @@ checkoutRequiredCodeToBuild() {
     else
       git remote set-branches --add origin "${BUILD_CONFIG[BRANCH]}" || rc=$?
       if [ $rc -eq 0 ]; then
+        # shellcheck disable=SC2086
         git fetch --all ${BUILD_CONFIG[SHALLOW_CLONE_OPTION]} || rc=$?
         if [ $rc -eq 0 ]; then
           git reset --hard "origin/${BUILD_CONFIG[BRANCH]}" || rc=$?
@@ -254,6 +255,7 @@ setGitCloneArguments() {
   cd "${BUILD_CONFIG[WORKSPACE_DIR]}"
   local git_remote_repo_address="${BUILD_CONFIG[REPOSITORY]}.git"
 
+  # shellcheck disable=SC2206
   GIT_CLONE_ARGUMENTS=(${BUILD_CONFIG[SHALLOW_CLONE_OPTION]} "$git_remote_repo_address" "${BUILD_CONFIG[WORKSPACE_DIR]}/${BUILD_CONFIG[WORKING_DIR]}/${BUILD_CONFIG[OPENJDK_SOURCE_DIR]}")
 }
 
