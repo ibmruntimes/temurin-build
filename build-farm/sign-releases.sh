@@ -33,9 +33,9 @@ fi
 echo "files:"
 ls -alh workspace/target/
 
-echo "OpenJDK*.${EXTENSION}"
+echo "*.${EXTENSION}"
 
-find workspace/target/ -name "OpenJDK*.${EXTENSION}" | while read -r file;
+find workspace/target/ -name "*.${EXTENSION}" | while read -r file;
 do
   echo "signing ${file}"
 
