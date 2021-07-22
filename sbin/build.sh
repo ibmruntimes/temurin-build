@@ -1354,6 +1354,10 @@ addVariantVersionToJson(){
     local minor=$(echo "$variantJson" | awk -F[.] '{print $2}')
     local security=$(echo "$variantJson" | awk -F[.] '{print $3}')
     local tags=$(echo "$variantJson" | awk -F[.] '{print $4}')
+    echo "major:${major}"
+    echo "minor:${minor}"
+    echo "security:${security}"
+    echo "tags:${tags}"
     if [[ $(echo "$variantJson" | tr -cd '.' | wc -c) -lt 3 ]]; then # Precaution for when OpenJ9 releases a 1.0.0 version
       tags="$minor"
       minor=""
