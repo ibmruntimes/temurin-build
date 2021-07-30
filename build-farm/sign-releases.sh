@@ -30,6 +30,10 @@ else
   exit 0
 fi
 
+if [ -z "$CERTIFICATE" ]; then
+  CERTIFICATE=''
+fi
+
 echo "files:"
 ls -alh workspace/target/
 
