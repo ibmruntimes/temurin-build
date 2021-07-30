@@ -30,10 +30,6 @@ else
   exit 0
 fi
 
-if [ -z "$CERTIFICATE" ]; then
-  CERTIFICATE=''
-fi
-
 echo "files:"
 ls -alh workspace/target/
 
@@ -48,7 +44,7 @@ do
       echo "signing ${file}"
 
       # shellcheck disable=SC2086
-      bash "${SCRIPT_DIR}/../sign.sh" ${CERTIFICATE} "${file}"
+      bash "${SCRIPT_DIR}/../sign.sh" "${file}"
     ;;
   esac
 done

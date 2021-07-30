@@ -161,8 +161,7 @@ function parseArguments() {
     shift;
   done
 
-  SIGNING_CERTIFICATE="$1";
-  ARCHIVE="$2";
+  ARCHIVE="$1";
 }
 
 function extractArchive {
