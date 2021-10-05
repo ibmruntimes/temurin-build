@@ -125,7 +125,7 @@ eclipseDockerCommands()
     docker build -t "${dockerImage}" -f Dockerfile .
     docker run -it -u root -d --name="${dockerContainer}" "${dockerImage}"
     docker exec -u root -i "${dockerContainer}" sh -c "git clone https://github.com/ibmruntimes/openj9-openjdk-${jdk}"
-    docker exec -u root -i "${dockerContainer}" sh -c "cd openj9-openjdk-${jdk} && bash ./get_source.sh && bash ./configure --with-freemarker-jar=/root/freemarker.jar && make all"
+    docker exec -u root -i "${dockerContainer}" sh -c "cd openj9-openjdk-${jdk} && bash ./get_source.sh && bash ./configure && make all"
     docker stop "${dockerContainer}"
     docker rm "${dockerContainer}"
     docker rmi "${dockerImage}"
