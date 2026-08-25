@@ -1,0 +1,469 @@
+# ********************************************************************************
+# Copyright (c) 2020 Contributors to the Eclipse Foundation
+#
+# See the NOTICE file(s) with this work for additional
+# information regarding copyright ownership.
+#
+# This program and the accompanying materials are made
+# available under the terms of the Apache Software License 2.0
+# which is available at https://www.apache.org/licenses/LICENSE-2.0.
+#
+# SPDX-License-Identifier: Apache-2.0
+# ********************************************************************************
+
+---
+name: Build
+
+on:
+  pull_request:
+    branches: [master]
+    paths:
+      - "build-farm/**"
+      - "sbin/**"
+      - "**.sh"
+      - "!tooling/build_autotriage/**"
+      - ".github/workflows/build.yml"
+      - "security/**"
+      - "cyclonedx-lib/**"
+
+# Cancel existing runs if user makes another push.
+concurrency:
+  group: "${{ github.ref }}"
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  build_linux:
+    name: Linux
+    runs-on: ubuntu-latest
+    container:
+      image: ${{ matrix.image }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [linux]
+        version: [jdk8u, jdk11u, jdk17u, jdk]
+        variant: [temurin]
+        image: [adoptopenjdk/centos7_build_image]
+        include:
+          - os: alpine-linux
+            version: jdk8u
+            variant: temurin
+            image: adoptopenjdk/alpine3_build_image
+          - os: alpine-linux
+            version: jdk11u
+            variant: temurin
+            image: adoptopenjdk/alpine3_build_image
+          - os: alpine-linux
+            version: jdk17u
+            variant: temurin
+            image: adoptopenjdk/alpine3_build_image
+          - os: alpine-linux
+            version: jdk
+            variant: temurin
+            image: adoptopenjdk/alpine3_build_image
+          - os: linux
+            version: jdk11u
+            variant: dragonwell
+            image: adoptopenjdk/centos7_build_image
+          - os: linux
+            version: jdk8u
+            vm: dragonwell
+            image: adoptopenjdk/centos7_build_image
+          - os: linux
+            version: jdk11u
+            variant: fast_startup
+            image: adoptopenjdk/centos7_build_image
+          - os: linux
+            version: jdk11u
+            variant: bisheng
+            image: adoptopenjdk/centos7_build_image
+    steps:
+    # pinned at v3 to as Node.js 20.x is not supported on Centos 7
+    - uses: actions/checkout@f43a0e5ff2bd294095638e18286ca9a3d1956744 # v3.6.0
+
+    - name: Build Linux
+      run: ./build-farm/make-adopt-build-farm.sh
+      env:
+        JAVA_TO_BUILD: ${{ matrix.version }}
+        ARCHITECTURE: x64
+        VARIANT: ${{ matrix.variant }}
+        TARGET_OS: ${{ matrix.os }}
+        FILENAME: OpenJDK.tar.gz
+        # Don't set the OS as we use both linux and alpine-linux
+        PLATFORM_CONFIG_LOCATION: adoptium/temurin-build/master/build-farm/platform-specific-configurations
+        BUILD_ARGS: --create-sbom
+        CONFIGURE_ARGS: --with-native-debug-symbols=none
+
+    # pinned at v3 to as Node.js 20.x is not supported on Centos 7
+    - uses: actions/upload-artifact@a8a3f3ad30e3422c9c7b888a15615d19a852ae32 # v3.1.3
+      name: Collect and Archive Artifacts
+      with:
+        name: ${{matrix.version}}-${{matrix.os}}-${{matrix.variant}}
+        path: workspace/target/*
+
+    - name: Unpack jdk
+      run: |
+        mkdir -p "${HOME}/JDK"
+        tar -xf "${GITHUB_WORKSPACE}/workspace/target/OpenJDK.tar.gz" -C "${HOME}/JDK"
+    - name: Set root of jdk image dir
+      run: |
+        imageroot=$(find "${HOME}/JDK" -name release -type f)
+        echo "TEST_JDK_HOME=$(dirname "${imageroot}")" >> "$GITHUB_ENV"
+    - name: Smoke test
+      uses: adoptium/run-aqa@6bacb4e732ad546eda1b09665b9067cdc87651f4 # v2
+      with:
+        build_list: 'functional/buildAndPackage'
+        target: '_extended.functional'
+        vendor_testRepos: "${{ github.event.pull_request.head.repo.html_url }}.git"
+        vendor_testBranches: "${{ github.head_ref }}"
+        vendor_testDirs: "/test/functional"
+    # pinned at v3 to as Node.js 20.x is not supported on Centos 7
+    - uses: actions/upload-artifact@a8a3f3ad30e3422c9c7b888a15615d19a852ae32 # v3.1.3
+      name: Collect and Archive SmokeTest Results
+      if: failure()
+      with:
+        name: "${{matrix.version}}-${{matrix.os}}-${{matrix.variant}}_test_output"
+        path: ./**/output_*/
+
+  build_macos:
+    name: macOS
+    runs-on: ${{ matrix.version.distro }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macOS]
+        version: [
+          { name: jdk8u, distro: macos-11 },
+          { name: jdk11u, distro: macos-14 },
+          { name: jdk17u, distro: macos-14 }
+        ]
+        variant: [temurin]
+
+    steps:
+    - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
+
+    # https://github.com/actions/runner-images/issues/6817
+    - name: (Mac) Workaround for homebrew
+      shell: bash
+      if: runner.os == 'macOS'
+      run: |
+          rm /usr/local/bin/2to3 || true
+          rm /usr/local/bin/2to3-3.11 || true
+          rm /usr/local/bin/2to3-3.12 || true
+          rm /usr/local/bin/idle3 || true
+          rm /usr/local/bin/idle3.11 || true
+          rm /usr/local/bin/idle3.12 || true
+          rm /usr/local/bin/pydoc3 || true
+          rm /usr/local/bin/pydoc3.11 || true
+          rm /usr/local/bin/pydoc3.12 || true
+          rm /usr/local/bin/python3 || true
+          rm /usr/local/bin/python3.11 || true
+          rm /usr/local/bin/python3.12 || true
+          rm /usr/local/bin/python3-config || true
+          rm /usr/local/bin/python3.11-config || true
+          rm /usr/local/bin/python3.12-config || true
+
+    - name: Install Dependencies
+      run: |
+        brew install automake bash binutils freetype gnu-sed nasm
+
+    - uses: actions/setup-java@99b8673ff64fbf99d8d325f52d9a5bdedb8483e9 # v4.2.1
+      id: setup-java
+      with:
+        java-version: 7
+        distribution: 'zulu'
+      if: matrix.version.name == 'jdk8u'
+
+    - name: Select correct Xcode (JDK8)
+      if: matrix.version.name == 'jdk8u'
+      run: |
+        rm -rf /Applications/Xcode.app
+        ln -s /Applications/Xcode_11.7.app /Applications/Xcode.app
+
+    - name: Select correct Xcode (JDK11+)
+      if: matrix.version.name != 'jdk8u'
+      run: |
+        rm -rf /Applications/Xcode.app
+        ln -s /Applications/Xcode_15.2.app /Applications/Xcode.app
+
+    - name: Build macOS
+      run: |
+        export JAVA_HOME=$JAVA_HOME_11_X64
+        # jdk11u+ uses two part exploded & assemble build
+        if [ ${{ matrix.version.name }} != "jdk8u" ]; then
+          export BUILD_ARGS="--make-exploded-image --create-sbom"
+          ./build-farm/make-adopt-build-farm.sh
+          export BUILD_ARGS="--assemble-exploded-image --create-sbom"
+          ./build-farm/make-adopt-build-farm.sh
+        else
+          export BUILD_ARGS="--create-sbom"
+          ./build-farm/make-adopt-build-farm.sh
+        fi
+      env:
+        JAVA_TO_BUILD: ${{ matrix.version.name }}
+        ARCHITECTURE: x64
+        VARIANT: ${{ matrix.variant }}
+        TARGET_OS: mac
+        FILENAME: OpenJDK.tar.gz
+        JDK7_BOOT_DIR: ${{ steps.setup-java.outputs.path }}
+
+    - uses: actions/upload-artifact@5d5d22a31266ced268874388b861e4b58bb5c2f3 # v4.3.1
+      name: Collect and Archive Artifacts
+      with:
+        name: ${{matrix.version.name}}-${{matrix.os}}-${{matrix.variant}}
+        path: workspace/target/*
+
+    - name: Unpack jdk
+      run: |
+        mkdir -p "${HOME}/JDK"
+        tar -xf "${GITHUB_WORKSPACE}/workspace/target/OpenJDK.tar.gz" -C "${HOME}/JDK"
+
+    - name: Set root of jdk image dir
+      run: |
+        imageroot=$(find "${HOME}/JDK" -name release -type f)
+        echo "TEST_JDK_HOME=$(dirname "${imageroot}")" >> "$GITHUB_ENV"
+    - name: Smoke test
+      uses: adoptium/run-aqa@6bacb4e732ad546eda1b09665b9067cdc87651f4 # v2
+      with:
+        build_list: 'functional/buildAndPackage'
+        target: '_extended.functional'
+        vendor_testRepos: "${{ github.event.pull_request.head.repo.html_url }}.git"
+        vendor_testBranches: "${{ github.head_ref }}"
+        vendor_testDirs: "/test/functional"
+    - uses: actions/upload-artifact@5d5d22a31266ced268874388b861e4b58bb5c2f3 # v4.3.1
+      name: Collect and Archive SmokeTest Results
+      if: failure()
+      with:
+        name: "${{matrix.version.name}}-${{matrix.os}}-${{matrix.variant}}_test_output"
+        path: ./**/output_*/
+
+  build_windows:
+     name: Windows
+     runs-on: ${{ matrix.os }}
+     strategy:
+       fail-fast: false
+       matrix:
+         os: [windows-2022]
+         version: [jdk8u, jdk11u, jdk17u, jdk]
+         variant: [temurin]
+
+     env:
+      VS2017_URL: "https://download.visualstudio.microsoft.com/download/pr/c5c75dfa-1b29-4419-80f8-bd39aed6bcd9/7ed8fa27575648163e07548ff5667b55b95663a2323e2b2a5f87b16284e481e6/vs_Community.exe"
+      VS2019_URL: "https://download.visualstudio.microsoft.com/download/pr/6b655578-de8c-4862-ad77-65044ca714cf/f29399a618bd3a8d1dcc96d349453f686b6176590d904308402a6402543e310b/vs_Community.exe"
+
+     steps:
+     - name: Restore cygwin packages from cache
+       id: cygwin
+       uses: actions/cache@0c45773b623bea8c8e75f6c82b208c3cf94ea4f9 # v4.0.2
+       with:
+        path: C:\cygwin64
+        key: cygwin-packages-${{ runner.os }}-v1
+
+     - name: Install Cygwin and packages
+       uses: cygwin/cygwin-install-action@006ad0b0946ca6d0a3ea2d4437677fa767392401
+       with:
+         install-dir: C:\cygwin64
+         packages: >-
+           autoconf,
+           automake,
+           bsdtar,
+           cpio,
+           curl,
+           gcc-core,
+           git,
+           gnupg,
+           grep,
+           libtool,
+           make,
+           mingw64-x86_64-gcc-core,
+           perl,
+           rsync,
+           unzip,
+           wget,
+           zip
+
+     - uses: actions/setup-java@99b8673ff64fbf99d8d325f52d9a5bdedb8483e9 # v4.2.1
+       id: setup-java7
+       with:
+         distribution: 'zulu'
+         java-version: 7
+       if: matrix.version == 'jdk8u'
+
+     - uses: actions/setup-java@99b8673ff64fbf99d8d325f52d9a5bdedb8483e9 # v4.2.1
+       id: setup-java11
+       with:
+         distribution: 'temurin'
+         java-version: 11
+
+     - name: Restore Visual Studio 2017 from cache
+       id: vs2017
+       if: matrix.version == 'jdk8u'
+       uses: actions/cache@0c45773b623bea8c8e75f6c82b208c3cf94ea4f9 # v4.0.2
+       with:
+         path: ~/vs2017.exe
+         key: vs2017
+
+     - name: Restore Visual Studio 2019 from cache
+       id: vs2019
+       if: matrix.version == 'jdk11u' || matrix.version == 'jdk17u'
+       uses: actions/cache@0c45773b623bea8c8e75f6c82b208c3cf94ea4f9 # v4.0.2
+       with:
+         path: ~/vs2019.exe
+         key: vs2019
+
+     - name: Uninstall WinSDKs
+       if: matrix.version == 'jdk8u' || matrix.version == 'jdk11u' || matrix.version == 'jdk17u'
+       run: >
+         Start-Process -FilePath 'C:\Program Files (x86)\Microsoft Visual Studio\Installer\vs_installer.exe' -Wait -NoNewWindow -ArgumentList
+         'modify --installPath "C:\Program Files (x86)\Microsoft Visual Studio\2022\Enterprise"
+         --remove Microsoft.VisualStudio.Component.Windows10SDK.18362
+         --remove Microsoft.VisualStudio.Component.Windows10SDK.19041
+         --remove Microsoft.VisualStudio.Component.Windows10SDK.20348
+         --remove Microsoft.VisualStudio.Component.Windows10SDK.22000
+         --remove Microsoft.VisualStudio.Component.Windows10SDK.22621
+         --quiet'
+
+     - name: Download Visual Studio 2017
+       run: |
+         curl -L "$env:VS2017_URL" -o "$HOME/vs2017.exe"
+       if: steps.vs2017.outputs.cache-hit != 'true' && matrix.version == 'jdk8u'
+
+     - name: Verify Download Of Visual Studio 2017
+       shell: powershell
+       run: |
+         $expected_checksum="7ED8FA27575648163E07548FF5667B55B95663A2323E2B2A5F87B16284E481E6"
+         $actual_checksum=(Get-FileHash -Algorithm SHA256 -Path $HOME/vs2017.exe | Select-Object -ExpandProperty Hash)
+         echo "Expect : $expected_checksum"
+         echo "Actual : $actual_checksum"
+         if ($expected_checksum -ne $actual_checksum) {
+           Write-Output "Error - Checksum Verification Failed - Exiting"
+           exit 1
+         }
+       if: steps.vs2017.outputs.cache-hit != 'true' && matrix.version == 'jdk8u'
+
+     - name: Install Visual Studio 2017
+       if: matrix.version == 'jdk8u'
+       run: >
+         Start-Process -FilePath "$HOME\vs2017.exe" -Wait -NoNewWindow -ArgumentList
+         'install --productId Microsoft.VisualStudio.Product.Community --channelId VisualStudio.15.Release
+         --add Microsoft.VisualStudio.Workload.NativeDesktop
+         --add Microsoft.VisualStudio.Component.VC.Tools.x86.x64
+         --add Microsoft.VisualStudio.Component.Windows10SDK.17763
+         --quiet --wait'
+
+     - name: Download Visual Studio 2019
+       run: |
+         curl -L "$env:VS2019_URL" -o "$HOME/vs2019.exe"
+       if: steps.vs2019.outputs.cache-hit != 'true' && (matrix.version == 'jdk11u' || matrix.version == 'jdk17u')
+
+     - name: Verify Download Of Visual Studio 2019
+       shell: powershell
+       run: |
+         $expected_checksum="F29399A618BD3A8D1DCC96D349453F686B6176590D904308402A6402543E310B"
+         $actual_checksum=(Get-FileHash -Algorithm SHA256 -Path $HOME/vs2019.exe | Select-Object -ExpandProperty Hash)
+         echo "Expect : $expected_checksum"
+         echo "Actual : $actual_checksum"
+         if ($expected_checksum -ne $actual_checksum) {
+           Write-Output "Error - Checksum Verification Failed - Exiting"
+           exit 1
+         }
+       if: steps.vs2019.outputs.cache-hit != 'true' && (matrix.version == 'jdk11u' || matrix.version == 'jdk17u')
+
+     - name: Install Visual Studio 2019
+       if: matrix.version == 'jdk11u' || matrix.version == 'jdk17u'
+       run: >
+         Start-Process -FilePath "$HOME\vs2019.exe" -Wait -NoNewWindow -ArgumentList
+         'install --productId Microsoft.VisualStudio.Product.Community --channelId VisualStudio.15.Release
+         --add Microsoft.VisualStudio.Workload.NativeDesktop
+         --add Microsoft.VisualStudio.Component.VC.Tools.x86.x64
+         --add Microsoft.VisualStudio.Component.Windows10SDK.22000
+         --quiet --wait'
+
+     - name: Install Git
+       run: |
+         Invoke-WebRequest 'https://github.com/git-for-windows/git/releases/download/v2.14.3.windows.1/Git-2.14.3-64-bit.exe' -OutFile 'C:\temp\git.exe'
+         Start-Process -Wait -FilePath 'C:\temp\git.exe' -ArgumentList '/SILENT /ALLOWDOWNGRADE=1** /COMPONENTS="icons,ext\reg\shellhere,assoc,assoc_sh"'
+
+     - name: Set PATH
+       run: (printf "C:\cygwin64\bin;C:\Program Files\Git\bin;") | Out-File -FilePath "$env:GITHUB_PATH" -Encoding utf8 -Append
+
+     - name: Cygwin git configuration
+       shell: bash
+       run: mkdir -p "$HOME" && git config --system core.autocrlf false && git config --global --add safe.directory '*'
+
+     - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
+       with:
+         set-safe-directory: false
+
+     - name: Setup 8dot3name
+       run: fsutil behavior set disable8dot3 0
+
+     - name: Set JAVA_HOME
+       run: echo "JAVA_HOME=$(cygpath "${{ steps.setup-java11.outputs.path }}")" | Out-File -FilePath "$env:GITHUB_ENV" -Encoding utf8 -Append
+
+     - name: Set JDK7_BOOT_DIR
+       run: echo "JDK7_BOOT_DIR=$(cygpath "${{ steps.setup-java7.outputs.path }}")" | Out-File -FilePath "$env:GITHUB_ENV" -Encoding utf8 -Append
+       if: matrix.version == 'jdk8u'
+
+     - name: Hold ANT_HOME value (from GH) to ANT_HOME2
+       run: echo "ANT_HOME_ORIGIN=${env:ANT_HOME}" | Out-File -FilePath "$env:GITHUB_ENV" -Encoding utf8 -Append
+
+     - name: Export ANT to PATH(GITHUB_ENV)
+       run: echo "ANT_HOME=$(cygpath "${env:ANT_HOME}")" | Out-File -FilePath "$env:GITHUB_ENV" -Encoding utf8 -Append
+
+     - name: Append ANT_HOME to PATH
+       run: |
+        "${env:ANT_HOME}/bin" >> ${env:GITHUB_PATH}
+       shell: pwsh
+
+     - name: Build Windows
+       run: |
+         bash build-farm/make-adopt-build-farm.sh
+       shell: cmd
+       env:
+         JAVA_TO_BUILD: ${{ matrix.version }}
+         ARCHITECTURE: x64
+         VARIANT: ${{ matrix.variant }}
+         TARGET_OS: windows
+         FILENAME: OpenJDK.zip
+         BUILD_ARGS: --create-sbom
+
+     - uses: actions/upload-artifact@5d5d22a31266ced268874388b861e4b58bb5c2f3 # v4.3.1
+       name: Collect and Archive Artifacts
+       with:
+         name: ${{matrix.version}}-${{matrix.os}}-${{matrix.variant}}
+         path: workspace/target/*
+
+     - name: Restore build artifacts
+       uses: actions/download-artifact@65a9edc5881444af0b9093a5e628f2fe47ea3b2e # v4.1.7
+       with:
+         name: ${{matrix.version}}-${{matrix.os}}-${{matrix.variant}}
+         path: ~/${{matrix.version}}-${{matrix.os}}-${{matrix.variant}}
+
+     - name: Unpack jdk
+       run: |
+         unzip "${HOME}/${{matrix.version}}-${{matrix.os}}-${{matrix.variant}}/OpenJDK.zip" -d "${HOME}/${{matrix.version}}-${{matrix.os}}-${{matrix.variant}}"
+
+     - name: Set root of jdk image dir
+       shell: pwsh
+       run: |
+         $imageroot=$(find "${HOME}/${{matrix.version}}-${{matrix.os}}-${{matrix.variant}}" -name release -type f)
+         echo "TEST_JDK_HOME=$(dirname "${imageroot}")" | Out-File -FilePath "$env:GITHUB_ENV" -Encoding utf8 -Append
+
+     - name: Reset ANT_HOME from ANT_HOME_ORIGIN for smoke test
+       run: echo "ANT_HOME=${env:ANT_HOME_ORIGIN}" | Out-File -FilePath "$env:GITHUB_ENV" -Encoding utf8 -Append
+
+     - name: Smoke test
+       uses: adoptium/run-aqa@6bacb4e732ad546eda1b09665b9067cdc87651f4 # v2
+       with:
+         build_list: 'functional/buildAndPackage'
+         target: '_extended.functional'
+         vendor_testRepos: "${{ github.event.pull_request.head.repo.html_url }}.git"
+         vendor_testBranches: "${{ github.head_ref }}"
+         vendor_testDirs: "/test/functional"
+     - uses: actions/upload-artifact@5d5d22a31266ced268874388b861e4b58bb5c2f3 # v4.3.1
+       name: Collect and Archive SmokeTest Results
+       if: failure()
+       with:
+         name: "${{matrix.version}}-${{matrix.os}}-${{matrix.variant}}_test_output"
+         path: ./**/output_*/

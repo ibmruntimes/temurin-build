@@ -1,0 +1,83 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<!--
+  ~ ********************************************************************************
+  ~ Copyright (c) 2021 Contributors to the Eclipse Foundation
+  ~
+  ~ See the NOTICE file(s) with this work for additional
+  ~ information regarding copyright ownership.
+  ~
+  ~ This program and the accompanying materials are made
+  ~ available under the terms of the Apache Software License 2.0
+  ~ which is available at https://www.apache.org/licenses/LICENSE-2.0.
+  ~
+  ~ SPDX-License-Identifier: Apache-2.0
+  ~ ********************************************************************************
+-->
+
+<playlist xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="../../TKG/playlist.xsd">
+	<test>
+		<testCaseName>Java_Version</testCaseName>
+		<command>$(JAVA_COMMAND) -version; $(TEST_STATUS)</command>
+		<levels>
+			<level>extended</level>
+		</levels>
+		<groups>
+			<group>functional</group>
+		</groups>
+	</test>
+	<test>
+		<testCaseName>Jdk_Jre_Version</testCaseName>
+		<command>$(TEST_JDK_HOME)$(D)jre$(D)bin$(D)java -version; $(TEST_STATUS)</command>
+		<levels>
+			<level>extended</level>
+		</levels>
+		<groups>
+			<group>functional</group>
+		</groups>
+		<impls>
+			<impl>openj9</impl>
+		</impls>
+		<versions>
+			<version>8</version>
+		</versions>
+	</test>
+    <test>
+        <testCaseName>Adopt_HS_FeatureTests</testCaseName>
+        <command>
+            $(JAVA_COMMAND) $(JVM_OPTIONS) -cp \
+            $(Q)$(RESOURCES_DIR)$(P)$(TESTNG)$(P)$(TEST_RESROOT)$(D)BuildAndPackagingTests.jar$(Q) org.testng.TestNG \
+            $(Q)$(TEST_RESROOT)$(D)testng.xml$(Q) -d $(REPORTDIR) -testnames CommonFeatureTests,HotspotFeatureTests \
+            -groups $(TEST_GROUP) -excludegroups $(DEFAULT_EXCLUDE); $(TEST_STATUS)
+        </command>
+        <levels>
+            <level>extended</level>
+        </levels>
+        <groups>
+            <group>functional</group>
+        </groups>
+        <impls>
+            <impl>hotspot</impl>
+        </impls>
+         <vendors>
+            <vendor>eclipse</vendor>
+        </vendors>
+    </test>
+    <test>
+        <testCaseName>Adopt_J9_FeatureTests</testCaseName>
+        <command>
+            $(JAVA_COMMAND) $(JVM_OPTIONS) -cp \
+            $(Q)$(RESOURCES_DIR)$(P)$(TESTNG)$(P)$(TEST_RESROOT)$(D)BuildAndPackagingTests.jar$(Q) org.testng.TestNG \
+            $(Q)$(TEST_RESROOT)$(D)testng.xml$(Q) -d $(REPORTDIR) -testnames CommonFeatureTests,OpenJ9FeatureTests \
+            -groups $(TEST_GROUP) -excludegroups $(DEFAULT_EXCLUDE); $(TEST_STATUS)
+        </command>
+        <levels>
+            <level>extended</level>
+        </levels>
+        <groups>
+            <group>functional</group>
+        </groups>
+        <impls>
+            <impl>openj9</impl>
+        </impls>
+    </test>
+</playlist>

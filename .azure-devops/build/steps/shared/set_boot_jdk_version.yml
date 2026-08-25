@@ -1,0 +1,34 @@
+# ********************************************************************************
+# Copyright (c) 2020 Contributors to the Eclipse Foundation
+#
+# See the NOTICE file(s) with this work for additional
+# information regarding copyright ownership.
+#
+# This program and the accompanying materials are made
+# available under the terms of the Apache Software License 2.0
+# which is available at https://www.apache.org/licenses/LICENSE-2.0.
+#
+# SPDX-License-Identifier: Apache-2.0
+# ********************************************************************************
+
+steps:
+  - bash: |
+      BOOTJDK_VERSION=
+      if [ "$(JAVA_TO_BUILD)" == "jdk" ]
+      then
+          BOOTJDK_VERSION=15
+      elif [ "$(JAVA_TO_BUILD)" == "jdk15" ]
+      then
+          BOOTJDK_VERSION=14
+      elif [ "$(JAVA_TO_BUILD)" == "jdk14u" ]
+      then
+          BOOTJDK_VERSION=13
+      elif [ "$(JAVA_TO_BUILD)" == "jdk11u" ]
+      then
+          BOOTJDK_VERSION=10
+      elif [ "$(JAVA_TO_BUILD)" == "jdk8u" ]
+      then
+          BOOTJDK_VERSION=7
+      fi
+      echo "##vso[task.setvariable variable=BOOTJDK_VERSION]${BOOTJDK_VERSION}"
+    displayName: "[Shared Before] set BOOTJDK_VERSION"
