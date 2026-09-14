@@ -330,7 +330,8 @@ configureVersionStringParameter() {
     # passed in USER_SUPPLIED_CONFIGURE_ARGS (e.g. "11.0.32.10"). This is the IBM CPU version
     # and is used in getJdkArchivePath() to produce the correct extracted directory name
     # (e.g. jdk-11.0.32.10 instead of jdk-11.0.32.1+1 for .10 CPU releases).
-    # JDK8 gets VENDOR_VERSION set earlier via --vendor-version in BUILD_ARGS.
+    # JDK8 gets VENDOR_VERSION set earlier via --vendor-version in BUILD_ARGS (e.g. "8.0.512.0-m1");
+    # getJdkArchivePath() strips any variant tag suffix so both produce a tag-free dir name.
     if [[ "${BUILD_CONFIG[OPENJDK_FEATURE_NUMBER]}" != "8" ]] \
       && [[ "${BUILD_CONFIG[USER_SUPPLIED_CONFIGURE_ARGS]}" =~ --with-vendor-version-string=[^0-9]*([0-9][0-9.]+) ]]; then
       BUILD_CONFIG[VENDOR_VERSION]="${BASH_REMATCH[1]}"
@@ -1442,10 +1443,14 @@ getJdkArchivePath() {
 
   # For Semeru/OpenJ9 builds: use the IBM vendor version (IMPLEMENTOR_VERSION) as the
   # archive directory name so the extracted directory matches the IBM version scheme.
-  # e.g. jdk-11.0.32.10 (non-JDK8) or jdk-8.0.504.0 (JDK8) instead of the upstream tag.
+  # e.g. jdk-11.0.32.10 (non-JDK8) or jdk-8.0.512.0 (JDK8) instead of the upstream tag.
+  # Strip any variant tag suffix (e.g. -m1, -rc1) so that JDK8 behaves the same as
+  # JDK11+: the extracted directory never includes the tag.
   if [[ "${BUILD_CONFIG[BUILD_VARIANT]}" == "${BUILD_VARIANT_OPENJ9}" ]] \
     && [[ -n "${BUILD_CONFIG[VENDOR_VERSION]}" ]]; then
-    version="jdk-${BUILD_CONFIG[VENDOR_VERSION]}"
+    local numericVendorVersion
+    [[ "${BUILD_CONFIG[VENDOR_VERSION]}" =~ ([0-9][0-9.]+) ]] && numericVendorVersion="${BASH_REMATCH[1]}"
+    version="jdk-${numericVendorVersion:-${BUILD_CONFIG[VENDOR_VERSION]}}"
   fi
 
   echo "$version"
